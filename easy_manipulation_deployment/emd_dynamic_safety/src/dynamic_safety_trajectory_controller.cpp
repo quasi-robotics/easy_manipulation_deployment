@@ -89,9 +89,9 @@ DynamicSafetyTrajectoryController::on_activate(const rclcpp_lifecycle::State & s
   return JointTrajectoryController::on_activate(state);
 }
 
-controller_interface::return_type DynamicSafetyTrajectoryController::update()
+controller_interface::return_type DynamicSafetyTrajectoryController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
 {
-  if (get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE) {
+  if (get_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE) {
     return controller_interface::return_type::OK;
   }
 
@@ -125,10 +125,9 @@ controller_interface::return_type DynamicSafetyTrajectoryController::update()
   // Main Speed scaling difference...
   // Adjust time with scaling factor
   TimeData time_data;
-  time_data.time = node_->now();
+  time_data.time = time;
   double scale = safety_officer_->get_scale();
   scaling_factor_.writeFromNonRT(scale);
-  rcl_duration_value_t period = (time_data.time - time_data_.readFromRT()->time).nanoseconds();
   time_data.period = rclcpp::Duration(period) * (*scaling_factor_.readFromRT());
   time_data.uptime = time_data_.readFromRT()->uptime + time_data.period;
   rclcpp::Time traj_time = time_data_.readFromRT()->uptime + time_data.period;
