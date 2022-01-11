@@ -355,7 +355,7 @@ void grasp_planner::GraspScene<T>::extractObjectsEPD(
     object->grasp_target.target_pose = object->getObjectPose(camera_frame);
     this->grasp_objects.push_back(object);
   }
-  RCLCPP_INFO(LOGGER, "EPD detected " + std::to_string(this->grasp_objects.size()) + " objects.");
+  RCLCPP_INFO_STREAM(LOGGER, "EPD detected " << std::to_string(this->grasp_objects.size()) << " objects.");
 }
 #endif
 /****************************************************************************************//**
@@ -593,15 +593,15 @@ template<typename T>
 void grasp_planner::GraspScene<T>::setup(std::string topic_name)
 {
   this->output_client =
-    this->node->create_client<emd_msgs::srv::GraspRequest>(
+    this->node->template create_client<emd_msgs::srv::GraspRequest>(
     this->node->get_parameter("grasp_output_service").as_string());
 
   this->epd_client =
-    this->node->create_client<epd_msgs::srv::Perception>(
+    this->node->template create_client<epd_msgs::srv::Perception>(
     this->node->get_parameter("easy_perception_deployment.epd_service").as_string());
   //this->node->get_parameter("epd_service").as_string());
 
-  RCLCPP_INFO(LOGGER, "Listening to: " + topic_name + "...");
+  RCLCPP_INFO_STREAM(LOGGER, "Listening to: " << topic_name << "...");
   this->perception_sub = std::make_shared<
     message_filters::Subscriber<T>>(
     node, topic_name);
