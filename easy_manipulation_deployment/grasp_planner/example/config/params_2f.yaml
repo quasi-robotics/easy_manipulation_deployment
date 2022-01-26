@@ -6,11 +6,11 @@ grasp_planning_node:
       epd_localization_topic: "/processor/epd_localize_output"
       epd_tracking_topic: "/processor/epd_tracking_output"
       epd_service: "epd_perception_service"
-      epd_enabled: true
+      epd_enabled: false
       tracking_enabled: false
     camera_parameters:
-      point_cloud_topic: "/camera/pointcloud"
-      camera_frame: "camera_color_optical_frame"
+      point_cloud_topic: "/realsense/depth/color/points"
+      camera_frame: "realsense_depth_frame"
     point_cloud_params:
       passthrough_filter_limits_x: [-0.50, 0.50]
       passthrough_filter_limits_y: [-0.15, 0.10]
@@ -28,10 +28,10 @@ grasp_planning_node:
         type: finger
         num_fingers_side_1: 1
         num_fingers_side_2: 1
-        distance_between_fingers_1: 0.0
-        distance_between_fingers_2: 0.0
+        distance_between_fingers_1: 0.0   #Distance between fingers on side 1
+        distance_between_fingers_2: 0.0   #Distance between fingers on side 2
         finger_thickness: 0.02
-        gripper_stroke: 0.09
+        gripper_stroke: 0.09              #Distance between opposite fingers
         gripper_coordinate_system:
           grasp_stroke_direction: "x"
           grasp_stroke_normal_direction: "y"
@@ -45,6 +45,6 @@ grasp_planning_node:
           world_y_angle_threshold: 0.5
           world_z_angle_threshold: 0.25
     visualization_params:
-      point_cloud_visualization: true
+      point_cloud_visualization: false
 
       

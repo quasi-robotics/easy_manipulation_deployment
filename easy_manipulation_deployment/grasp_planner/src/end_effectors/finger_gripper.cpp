@@ -17,6 +17,8 @@
 // Main PCL files
 #include "emd/grasp_planner/end_effectors/finger_gripper.hpp"
 static const rclcpp::Logger & LOGGER = rclcpp::get_logger("FingerGripper");
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 
 /***************************************************************************//**
  * Finger Gripper Constructor
@@ -168,7 +170,7 @@ void FingerGripper::generateGripperAttributes()
  * @param world_collision_object FCL collision object of the world
  ******************************************************************************/
 
-void FingerGripper::planGrasps(
+std::vector<std::shared_ptr<multiFingerGripper>>& FingerGripper::planGraspsWithFingerResult(
   std::shared_ptr<GraspObject> object,
   emd_msgs::msg::GraspMethod * grasp_method,
   std::shared_ptr<CollisionObject> world_collision_object,
@@ -176,17 +178,20 @@ void FingerGripper::planGrasps(
 {
   getCenterCuttingPlane(object);
   getCuttingPlanes(object);
+
+  std::vector<std::shared_ptr<multiFingerGripper>> empty_result;
   if (!this->getGraspCloud(object)) {
     RCLCPP_ERROR(
       LOGGER,
       "Grasping Planes do not intersect with object. Off center grasp is needed. Please change gripper");
     this->resetVariables();
-    return;
+    
+    return empty_result;
   }
 
   if (!this->getInitialSamplePoints(object)) {
     this->resetVariables();
-    return;
+    return empty_result;
   }
 
   getInitialSampleCloud(object);
@@ -201,6 +206,16 @@ void FingerGripper::planGrasps(
   }
 
   this->sorted_gripper_configs = getAllRanks(valid_open_gripper_configs, grasp_method);
+  return this->sorted_gripper_configs;
+}
+
+void FingerGripper::planGrasps(
+  std::shared_ptr<GraspObject> object,
+  emd_msgs::msg::GraspMethod * grasp_method,
+  std::shared_ptr<CollisionObject> world_collision_object,
+  std::string camera_frame)
+{
+  planGraspsWithFingerResult(object, grasp_method, world_collision_object, camera_frame);
 }
 
 /***************************************************************************//**
@@ -581,6 +596,12 @@ void FingerGripper::getInitialSampleCloud(const std::shared_ptr<GraspObject> & o
           this->finger_thickness, object->cloud, object->cloud_normal,
           sample->sample_side_1->finger_cloud, sample->sample_side_1->finger_ncloud);
 
+          auto index = sample->sample_side_2->start_index;
+          if(index <=0 || sample->grasp_plane_ncloud->points.size() <= index)
+          {
+            return;
+          }
+          
         PCLFunctions::getClosestPointsByRadius(
           sample->grasp_plane_ncloud->points[sample->sample_side_2->start_index],
           this->finger_thickness, object->cloud, object->cloud_normal,
@@ -1490,6 +1511,9 @@ void FingerGripper::visualizeGrasps(
         this->grasp_samples[i]->grasp_plane_ncloud->points[
           this->grasp_samples[i]->sample_side_2->start_index],
         0.01, 1.0, 0, 1.0, "sample_side_2 " + std::to_string(i));
+
+        auto pos = this->grasp_samples[i]->grasp_plane_ncloud->points[
+          this->grasp_samples[i]->sample_side_1->start_index];
     }
 
     viewer->spin();

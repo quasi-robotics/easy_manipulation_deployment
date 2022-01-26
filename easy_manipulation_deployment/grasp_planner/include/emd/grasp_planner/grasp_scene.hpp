@@ -67,6 +67,8 @@
 #include "emd/common/conversions.hpp"
 #include "emd/common/pcl_functions.hpp"
 #include "emd/common/fcl_functions.hpp"
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 
 static const rclcpp::Logger & LOGGER = rclcpp::get_logger("GraspScene");
 namespace grasp_planner
@@ -193,8 +195,9 @@ public:
   #endif
 
   std::vector<std::shared_ptr<GraspObject>> grasp_objects;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr grasps_rviz_pub_;
   /*! \brief Vector of End effectors available */
-  std::vector<std::shared_ptr<EndEffector>> end_effectors;
+  std::vector<std::shared_ptr<FingerGripper>> end_effectors;
 
   rclcpp::Node::SharedPtr node;
 };

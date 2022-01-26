@@ -15,6 +15,120 @@
 
 // Main PCL files
 #include "emd/grasp_planner/grasp_scene.hpp"
+#include "geometry_msgs/msg/point.hpp"
+
+namespace
+{
+  enum CustomMarkerColor
+  {
+    RED =0,
+    GREEN = 1,
+    BLUE= 2
+  };
+
+  visualization_msgs::msg::Marker createMarker(const int shape, geometry_msgs::msg::Point& point, CustomMarkerColor color = CustomMarkerColor::BLUE)
+  {
+      visualization_msgs::msg::Marker marker;
+      //TODO set frame id from params
+      marker.header.frame_id = "realsense_color_optical_frame";
+      static int id = 0;
+
+      marker.ns = "finger";
+      marker.id = id;
+      id++;
+      marker.type = shape;
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.pose.position.x = point.x;
+      marker.pose.position.y = point.y;
+      marker.pose.position.z = point.z;
+      marker.lifetime = rclcpp::Duration(100.0, 0);
+
+      // use orientation of hand frame
+      //Eigen::Quaterniond quat(frame);
+      marker.pose.orientation.x = 0.0;
+      marker.pose.orientation.y = 0.0;
+      marker.pose.orientation.z = 0.0;
+      marker.pose.orientation.w = 1.0;
+
+      marker.scale.x = 0.02;
+      marker.scale.y = 0.02;
+      marker.scale.z = 0.02;
+
+      marker.color.a = 0.5;
+      marker.color.r = 0.0;
+      marker.color.b = 0.0;
+      marker.color.g = 0.0;
+
+      switch(color)
+      {
+        case CustomMarkerColor::RED:
+            marker.color.r = 1.0;
+            break;
+
+        case CustomMarkerColor::GREEN:
+            marker.color.g = 1.0;
+            break;
+
+        case CustomMarkerColor::BLUE:
+            marker.color.b = 1.0;
+            break;
+      }
+
+      return marker;
+  }
+
+  visualization_msgs::msg::Marker createPoint(geometry_msgs::msg::Point& point, CustomMarkerColor color = CustomMarkerColor::BLUE)
+  {
+      return createMarker(visualization_msgs::msg::Marker::SPHERE, point, color);
+  }
+
+  visualization_msgs::msg::Marker createLine(geometry_msgs::msg::Point& pointStart, geometry_msgs::msg::Point& pointEnd)
+  {
+      geometry_msgs::msg::Point point;
+      auto lineMarker = createMarker(visualization_msgs::msg::Marker::LINE_STRIP, point, CustomMarkerColor::RED);
+      lineMarker.points.push_back(pointStart);
+      lineMarker.points.push_back(pointEnd);
+      return lineMarker;
+  }
+}
+
+void publishMarkers(rclcpp::Node::SharedPtr node, std::vector<std::shared_ptr<multiFingerGripper>>& grasps)
+{
+    static const rclcpp::Logger & LOGGER = rclcpp::get_logger("GraspScene");
+    visualization_msgs::msg::MarkerArray markers;
+  
+    for(auto& multigripper : grasps)
+    {
+
+      RCLCPP_DEBUG(LOGGER, "Found grasp with rank %f", multigripper->rank);
+      auto gripper_pose = multigripper->pose.pose.position;
+      auto gripper_orientation = multigripper->pose.pose.orientation;
+
+      //marker of grasp first side point
+      geometry_msgs::msg::Point grasp1_point;
+      grasp1_point.x = multigripper->open_fingers_1[0](0);
+      grasp1_point.y = multigripper->open_fingers_1[0](1);
+      grasp1_point.z = multigripper->open_fingers_1[0](2);
+      markers.markers.push_back(createPoint(grasp1_point));
+
+      //marker of grasp second side point
+      geometry_msgs::msg::Point grasp2_point;
+      grasp2_point.x = multigripper->open_fingers_2[0](0);
+      grasp2_point.y = multigripper->open_fingers_2[0](1);
+      grasp2_point.z = multigripper->open_fingers_2[0](2);
+      markers.markers.push_back(createPoint(grasp2_point));
+
+      //marker of center
+      markers.markers.push_back(createPoint(multigripper->pose.pose.position));
+
+      //line between grasp points
+      markers.markers.push_back(createLine(grasp1_point, grasp2_point));
+    }//end cycle
+
+    const char kTopicVisualGrasps[] = "/grasp_library/grasps_rviz";
+    auto grasps_rviz_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>(kTopicVisualGrasps, 10);
+    grasps_rviz_pub_->publish(markers);
+}
 
 /***************************************************************************//**
  * Function that calls the grasp execution service after all grasp plans are
@@ -72,11 +186,10 @@ emd_msgs::msg::GraspTask grasp_planner::GraspScene<T>::generateGraspTask()
       grasp_method.grasp_ranks.insert(
         grasp_method.grasp_ranks.begin(), std::numeric_limits<float>::min());
 
-      gripper->planGrasps(
+      auto& grasp_config = gripper->planGraspsWithFingerResult(
         object, &grasp_method, world_collision_object,
         node->get_parameter("camera_parameters.camera_frame").as_string());
       grasp_method.grasp_ranks.pop_back();
-
       if (grasp_method.grasp_ranks.size() > 0) {
         object->grasp_target.grasp_methods.push_back(grasp_method);
       } else {
@@ -84,15 +197,19 @@ emd_msgs::msg::GraspTask grasp_planner::GraspScene<T>::generateGraspTask()
           LOGGER, "For Object " << object->grasp_target.target_type.c_str() <<
             ", no grasp methods can be found with end effector " << gripper->getID());
         // continue;
+        
       }
 
+      
+      publishMarkers(this->node, grasp_config);
       std::chrono::steady_clock::time_point grasp_end = std::chrono::steady_clock::now();
-
+      RCLCPP_INFO_STREAM(LOGGER, "Grasp planning found " << grasp_config.size() << " grasps for " << std::chrono::duration_cast<std::chrono::milliseconds>(grasp_end - grasp_begin).count()
+      << "ms");
       RCLCPP_INFO_STREAM(
         LOGGER, "Grasp planning time for " << grasp_method.ee_id << " " <<
           std::to_string(
           std::chrono::duration_cast<std::chrono::milliseconds>(grasp_end - grasp_begin).count()) +
-          " [ms] ");
+          " [ms] " << grasp_config.size() << " grasps");
 
       if (node->get_parameter("visualization_params.point_cloud_visualization").as_bool()) {
         gripper->visualizeGrasps(viewer, object);
@@ -185,54 +302,10 @@ void grasp_planner::GraspScene<T>::loadEndEffectors()
           "end_effectors." + end_effector +
           ".gripper_coordinate_system.grasp_approach_direction").as_string()
       );
-      std::shared_ptr<EndEffector> gripper_ptr = std::make_shared<FingerGripper>(gripper);
+      std::shared_ptr<FingerGripper> gripper_ptr = std::make_shared<FingerGripper>(gripper);
       this->end_effectors.push_back(gripper_ptr);
     } else if (end_effector_type.compare("suction") == 0) {
-      SuctionGripper gripper(
-        end_effector,
-        node->get_parameter("end_effectors." + end_effector + ".num_cups_length").as_int(),
-        node->get_parameter("end_effectors." + end_effector + ".num_cups_breadth").as_int(),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector + ".dist_between_cups_length").as_double()),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector + ".dist_between_cups_breadth").as_double()),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector + ".cup_radius").as_double()),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector + ".cup_height").as_double()),
-        node->get_parameter(
-          "end_effectors." + end_effector +
-          ".grasp_planning_params.num_sample_along_axis").as_int(),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector +
-          ".grasp_planning_params.search_resolution").as_double()),
-        node->get_parameter(
-          "end_effectors." + end_effector +
-          ".grasp_planning_params.search_angle_resolution").as_int(),
-        static_cast<float>(node->get_parameter(
-          "point_cloud_params.cloud_normal_radius").as_double()),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector +
-          ".grasp_planning_params.weights.curvature").as_double()),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector +
-          ".grasp_planning_params.weights.grasp_distance_to_center").as_double()),
-        static_cast<float>(node->get_parameter(
-          "end_effectors." + end_effector +
-          ".grasp_planning_params.weights.number_contact_points").as_double()),
-        node->get_parameter(
-          "end_effectors." + end_effector +
-          ".gripper_coordinate_system.length_direction").as_string(),
-        node->get_parameter(
-          "end_effectors." + end_effector +
-          ".gripper_coordinate_system.breadth_direction").as_string(),
-        node->get_parameter(
-          "end_effectors." + end_effector +
-          ".gripper_coordinate_system.grasp_approach_direction").as_string());
-
-      std::shared_ptr<EndEffector> gripper_ptr = std::make_shared<SuctionGripper>(gripper);
-
-      this->end_effectors.push_back(gripper_ptr);
+      // Not used
     }
   }
   RCLCPP_INFO(LOGGER, "All End Effectors Loaded");
@@ -532,7 +605,6 @@ void grasp_planner::GraspScene<sensor_msgs::msg::PointCloud2>::startPlanning(
   extractObjects(msg);
   // loadEndEffectors();
   emd_msgs::msg::GraspTask grasp_task = generateGraspTask();
-  sendToExecution(grasp_task);
   RCLCPP_INFO(LOGGER, "Grasp Planning complete.");
 }
 

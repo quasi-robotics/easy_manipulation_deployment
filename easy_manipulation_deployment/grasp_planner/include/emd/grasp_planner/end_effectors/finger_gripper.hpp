@@ -307,6 +307,12 @@ public:
     std::shared_ptr<CollisionObject> world_collision_object,
     std::string camera_frame);
 
+  std::vector<std::shared_ptr<multiFingerGripper>>& planGraspsWithFingerResult(
+    std::shared_ptr<GraspObject> object,
+    emd_msgs::msg::GraspMethod * grasp_method,
+    std::shared_ptr<CollisionObject> world_collision_object,
+    std::string camera_frame);
+
   void resetVariables();
 
   void addCuttingPlanesEqualAligned(
